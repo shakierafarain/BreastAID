@@ -327,45 +327,6 @@ def show_dashboard_doctor_page():
         st.rerun()
 
     st.markdown("---")
-
-    # Appointment section
-    st.subheader("📅 Your Appointments")
-    
-    doctor_appointments = get_user_appointments(st.session_state.user_email)
-    pending_apts = [a for a in doctor_appointments if a.get("status") == "scheduled" and a.get("doctor_accepted") is None]
-    confirmed_apts = [a for a in doctor_appointments if a.get("status") == "confirmed"]
-    
-    if pending_apts:
-        st.markdown("**⏳ Pending Confirmation**")
-        for apt in pending_apts:
-            with st.container():
-                apt_type = apt.get('appointment_type', 'ftf')
-                apt_type_display = "🎥 Online" if apt_type == "online" else "🏥 Face-to-Face"
-                meeting_link = apt.get('meeting_link')
-                meeting_info = f"\n🔗 [Join Meeting]({meeting_link})" if meeting_link else ""
-                
-                st.markdown(f"""
-                **Patient:** {apt.get('public_name', 'N/A')}  
-                **Type:** {apt_type_display}  
-                **Date:** {apt.get('appointment_date', 'N/A')} at {apt.get('appointment_time', 'N/A')}  
-                **Status:** Waiting for confirmation{meeting_info}
-                """)
-                st.caption("Check your notifications to accept or request reschedule")
-            st.divider()
-    
-    if confirmed_apts:
-        st.markdown("**✅ Confirmed Appointments**")
-        for apt in confirmed_apts:
-            apt_type = apt.get('appointment_type', 'ftf')
-            apt_type_display = "🎥 Online" if apt_type == "online" else "🏥 Face-to-Face"
-            meeting_link = apt.get('meeting_link')
-            meeting_info = f" | 🔗 [Join Meeting]({meeting_link})" if meeting_link else ""
-            st.success(f"**{apt.get('public_name', 'N/A')}** ({apt_type_display}) - {apt.get('appointment_date')} at {apt.get('appointment_time')}{meeting_info}")
-    
-    if not pending_apts and not confirmed_apts:
-        st.info("No appointments at this time")
-
-    st.markdown("---")
     st.subheader("📊 Patient Assessment Analytics")
     
     # Load all public users' assessments
@@ -469,3 +430,40 @@ def show_dashboard_doctor_page():
                 st.write(f"**Completed At:** {completed_date}")
     else:
         st.info("No assessments available yet.")
+
+    st.markdown("---")
+    st.subheader("📅 Your Appointments")
+    
+    doctor_appointments = get_user_appointments(st.session_state.user_email)
+    pending_apts = [a for a in doctor_appointments if a.get("status") == "scheduled" and a.get("doctor_accepted") is None]
+    confirmed_apts = [a for a in doctor_appointments if a.get("status") == "confirmed"]
+    
+    if pending_apts:
+        st.markdown("**⏳ Pending Confirmation**")
+        for apt in pending_apts:
+            with st.container():
+                apt_type = apt.get('appointment_type', 'ftf')
+                apt_type_display = "🎥 Online" if apt_type == "online" else "🏥 Face-to-Face"
+                meeting_link = apt.get('meeting_link')
+                meeting_info = f"\n🔗 [Join Meeting]({meeting_link})" if meeting_link else ""
+                
+                st.markdown(f"""
+                **Patient:** {apt.get('public_name', 'N/A')}  
+                **Type:** {apt_type_display}  
+                **Date:** {apt.get('appointment_date', 'N/A')} at {apt.get('appointment_time', 'N/A')}  
+                **Status:** Waiting for confirmation{meeting_info}
+                """)
+                st.caption("Check your notifications to accept or request reschedule")
+            st.divider()
+    
+    if confirmed_apts:
+        st.markdown("**✅ Confirmed Appointments**")
+        for apt in confirmed_apts:
+            apt_type = apt.get('appointment_type', 'ftf')
+            apt_type_display = "🎥 Online" if apt_type == "online" else "🏥 Face-to-Face"
+            meeting_link = apt.get('meeting_link')
+            meeting_info = f" | 🔗 [Join Meeting]({meeting_link})" if meeting_link else ""
+            st.success(f"**{apt.get('public_name', 'N/A')}** ({apt_type_display}) - {apt.get('appointment_date')} at {apt.get('appointment_time')}{meeting_info}")
+    
+    if not pending_apts and not confirmed_apts:
+        st.info("No appointments at this time")
