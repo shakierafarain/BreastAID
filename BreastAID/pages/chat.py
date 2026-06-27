@@ -63,6 +63,9 @@ def show_chat_page():
                                 "appointment_id": apt["id"],
                                 "public_email": apt["public_email"],
                                 "public_name": apt["public_name"],
+                                # participant_email/name required by the chat window & send_chat_message
+                                "participant_email": apt["public_email"],
+                                "participant_name": apt["public_name"],
                             }
                             st.rerun()
                     st.divider()
@@ -251,27 +254,24 @@ def show_chat_page():
         # Message input
         st.divider()
         
-        # Initialize message input default value
-        if "message_just_sent" not in st.session_state:
-            st.session_state.message_just_sent = False
-        
-        input_value = ""
-        if st.session_state.message_just_sent:
-            st.session_state.message_just_sent = False
-        
+        # Counter-based key forces a brand-new widget after each send,
+        # which is the only safe way to clear a text_input in Streamlit.
+        if "msg_send_count" not in st.session_state:
+            st.session_state.msg_send_count = 0
+
         col1, col2 = st.columns([4, 1])
-        
+
         with col1:
             message_input = st.text_input(
                 "Type your message...",
-                value=input_value,
-                placeholder="Write your message here..."
+                placeholder="Write your message here...",
+                key=f"msg_input_{conv_id}_{st.session_state.msg_send_count}"
             )
         
         with col2:
-            if st.button("📤 Send", use_container_width=True):
-                if message_input.strip():
-                    send_chat_message(
+            if st.button("📤 Send", use_container_width=True, key=f"send_btn_{conv_id}"):
+                if message_input and message_input.strip():
+                    success = send_chat_message(
                         conversation_id=conv_id,
                         sender_email=user_email,
                         sender_name=user_name,
@@ -280,9 +280,12 @@ def show_chat_page():
                         recipient_email=participant_email,
                         message_type="text"
                     )
-                    st.session_state.message_just_sent = True
-                    st.success("✅ Message sent!")
-                    st.rerun()
+                    if success:
+                        # Increment counter → new widget key on next render → input is blank
+                        st.session_state.msg_send_count += 1
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to send message")
                 else:
                     st.warning("⚠️ Please type a message")
         
