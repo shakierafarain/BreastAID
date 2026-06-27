@@ -1,11 +1,6 @@
 """Firebase operations helper functions."""
 import streamlit as st
 from datetime import datetime
-from zoneinfo import ZoneInfo
-
-def now_myt():
-    """Return current datetime in Malaysia Time (UTC+8)."""
-    return datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
 from typing import Optional, Dict
 from config.firebase_config import get_db
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -20,7 +15,7 @@ def save_user_info(email: str, name: str, role: str = None, password: str = None
         user_data = {
             "name": name,
             "email": email,
-            "registered_at": now_myt(),
+            "registered_at": datetime.now(),
         }
         if role:
             user_data["role"] = role
@@ -78,7 +73,7 @@ def save_assessment(email: str, answers: dict, score: int, risk_level: str) -> N
             "answers": answers,
             "score": score,
             "risk_level": risk_level,
-            "completed_at": now_myt(),
+            "completed_at": datetime.now(),
         }
         db.collection("users").document(email).collection("assessments").add(assessment_data)
         st.success("Assessment saved!")
@@ -94,7 +89,7 @@ def load_user_assessments(email: str) -> list:
         docs = assessments_query.stream()
         assessments = [{"id": doc.id, **doc.to_dict()} for doc in docs]
         # Sort by completed_at in descending order
-        assessments.sort(key=lambda x: x.get("completed_at", now_myt()), reverse=True)
+        assessments.sort(key=lambda x: x.get("completed_at", datetime.now()), reverse=True)
         return assessments
     except Exception:
         return []
@@ -154,7 +149,7 @@ def load_public_user_assessments(email: str) -> list:
         assessments_query = db.collection("users").document(email).collection("assessments")
         docs = assessments_query.stream()
         assessments = [{"id": doc.id, **doc.to_dict()} for doc in docs]
-        assessments.sort(key=lambda x: x.get("completed_at", now_myt()), reverse=True)
+        assessments.sort(key=lambda x: x.get("completed_at", datetime.now()), reverse=True)
         return assessments
     except Exception:
         return []
@@ -185,7 +180,7 @@ def load_all_assessments_aggregated() -> list:
                     assessment_data["assessment_id"] = assessment_doc.id
                     all_assessments.append(assessment_data)
         
-        all_assessments.sort(key=lambda x: x.get("completed_at", now_myt()), reverse=True)
+        all_assessments.sort(key=lambda x: x.get("completed_at", datetime.now()), reverse=True)
         return all_assessments
     except Exception:
         return []
@@ -217,7 +212,7 @@ def request_appointment(public_email: str, public_name: str, appointment_type: s
             "public_email": public_email,
             "public_name": public_name,
             "appointment_type": appointment_type,  # "ftf" or "online"
-            "requested_at": now_myt(),
+            "requested_at": datetime.now(),
             "status": "pending",  # pending, scheduled, confirmed, completed, cancelled
             "appointment_date": None,
             "appointment_time": None,
@@ -258,7 +253,7 @@ def get_all_appointments() -> list:
             apt["id"] = doc.id
             appointments.append(apt)
         
-        appointments.sort(key=lambda x: x.get("requested_at", now_myt()), reverse=True)
+        appointments.sort(key=lambda x: x.get("requested_at", datetime.now()), reverse=True)
         return appointments
     except Exception:
         return []
@@ -285,14 +280,18 @@ def get_user_appointments(email: str) -> list:
             if apt not in appointments:
                 appointments.append(apt)
         
-        appointments.sort(key=lambda x: x.get("requested_at", now_myt()), reverse=True)
+        appointments.sort(key=lambda x: x.get("requested_at", datetime.now()), reverse=True)
         return appointments
     except Exception:
         return []
 
 
-def schedule_appointment(appointment_id: str, doctor_email: str, doctor_name: str, appointment_date: str, appointment_time: str) -> bool:
-    """Admin schedules appointment with specific doctor."""
+def schedule_appointment(appointment_id: str, doctor_email: str, doctor_name: str, appointment_date: str, appointment_time: str, meeting_link: str = None) -> bool:
+    """Admin schedules appointment with specific doctor.
+    
+    For online appointments, admin manually provides the meeting_link.
+    For face-to-face appointments, meeting_link is None.
+    """
     try:
         db = get_db()
         
@@ -305,10 +304,8 @@ def schedule_appointment(appointment_id: str, doctor_email: str, doctor_name: st
         apt = apt_doc.to_dict()
         appointment_type = apt.get("appointment_type", "ftf")
         
-        # Generate meeting link if online
-        meeting_link = None
-        if appointment_type == "online":
-            meeting_link = generate_google_meet_link(appointment_id)
+        # Use the manually provided meeting link (no auto-generation)
+        # meeting_link is passed in directly from the admin dashboard
         
         # Update appointment
         update_data = {
@@ -461,7 +458,7 @@ def create_notification(recipient_email: str, recipient_role: str, notification_
             "notification_type": notification_type,
             "message": message,
             "read": False,
-            "created_at": now_myt(),
+            "created_at": datetime.now(),
             "related_id": related_id,
         }
         
@@ -489,7 +486,7 @@ def get_user_notifications(email: str, unread_only: bool = False) -> list:
             notif["id"] = doc.id
             notifications.append(notif)
         
-        notifications.sort(key=lambda x: x.get("created_at", now_myt()), reverse=True)
+        notifications.sort(key=lambda x: x.get("created_at", datetime.now()), reverse=True)
         return notifications
     except Exception:
         return []
@@ -535,7 +532,7 @@ def send_chat_message(conversation_id: str, sender_email: str, sender_name: str,
             "recipient_email": recipient_email,
             "content": content,
             "message_type": message_type,
-            "timestamp": now_myt(),
+            "timestamp": datetime.now(),
             "read": False,
         }
         
@@ -544,9 +541,9 @@ def send_chat_message(conversation_id: str, sender_email: str, sender_name: str,
         # Update conversation metadata
         db.collection("conversations").document(conversation_id).set({
             "last_message": content,
-            "last_message_time": now_myt(),
+            "last_message_time": datetime.now(),
             "participants": [sender_email, recipient_email],
-            "updated_at": now_myt(),
+            "updated_at": datetime.now(),
         }, merge=True)
         
         return True
@@ -568,7 +565,7 @@ def get_chat_messages(conversation_id: str) -> list:
             messages.append(message)
         
         # Sort by timestamp
-        messages.sort(key=lambda x: x.get("timestamp", now_myt()))
+        messages.sort(key=lambda x: x.get("timestamp", datetime.now()))
         return messages
     except Exception:
         return []
@@ -640,7 +637,7 @@ def get_pending_appointments() -> list:
             apt["id"] = doc.id
             appointments.append(apt)
         
-        appointments.sort(key=lambda x: x.get("requested_at", now_myt()), reverse=True)
+        appointments.sort(key=lambda x: x.get("requested_at", datetime.now()), reverse=True)
         return appointments
     except Exception:
         return []
@@ -824,7 +821,7 @@ def update_user_profile(email: str, update_data: Dict) -> bool:
                 return False
         
         # Add updated timestamp
-        update_data["updated_at"] = now_myt()
+        update_data["updated_at"] = datetime.now()
         
         db.collection("users").document(email).update(update_data)
         return True
@@ -851,7 +848,7 @@ def change_user_password(email: str, current_password: str, new_password: str) -
         hashed_password = generate_password_hash(new_password)
         db.collection("users").document(email).update({
             "password": hashed_password,
-            "updated_at": now_myt()
+            "updated_at": datetime.now()
         })
         
         return True
@@ -879,7 +876,7 @@ def update_user_email(old_email: str, new_email: str, password: str) -> bool:
         
         # Copy user data to new email document
         user_data["email"] = new_email
-        user_data["updated_at"] = now_myt()
+        user_data["updated_at"] = datetime.now()
         db.collection("users").document(new_email).set(user_data)
         
         # Delete old email document
@@ -908,8 +905,8 @@ def save_consultation_notes(appointment_id: str, doctor_email: str, doctor_name:
             "patient_email": patient_email,
             "patient_name": patient_name,
             "notes": notes_content,
-            "created_at": now_myt(),
-            "updated_at": now_myt(),
+            "created_at": datetime.now(),
+            "updated_at": datetime.now(),
         }
         
         # Save in a new collection
@@ -918,7 +915,7 @@ def save_consultation_notes(appointment_id: str, doctor_email: str, doctor_name:
         # Mark appointment as completed
         db.collection("appointments").document(appointment_id).update({
             "status": "completed",
-            "completed_at": now_myt(),
+            "completed_at": datetime.now(),
             "has_notes": True
         })
         
@@ -957,7 +954,7 @@ def get_consultation_notes_for_doctor(doctor_email: str) -> list:
             notes_list.append(notes)
         
         # Sort by created_at in descending order
-        notes_list.sort(key=lambda x: x.get("created_at", now_myt()), reverse=True)
+        notes_list.sort(key=lambda x: x.get("created_at", datetime.now()), reverse=True)
         return notes_list
     except Exception:
         return []
@@ -976,7 +973,7 @@ def get_consultation_notes_for_patient(patient_email: str) -> list:
             notes_list.append(notes)
         
         # Sort by created_at in descending order
-        notes_list.sort(key=lambda x: x.get("created_at", now_myt()), reverse=True)
+        notes_list.sort(key=lambda x: x.get("created_at", datetime.now()), reverse=True)
         return notes_list
     except Exception:
         return []
@@ -995,7 +992,7 @@ def get_all_consultation_notes() -> list:
             notes_list.append(notes)
         
         # Sort by created_at in descending order
-        notes_list.sort(key=lambda x: x.get("created_at", now_myt()), reverse=True)
+        notes_list.sort(key=lambda x: x.get("created_at", datetime.now()), reverse=True)
         return notes_list
     except Exception:
         return []
@@ -1007,7 +1004,7 @@ def update_consultation_notes(notes_id: str, updated_notes_content: str) -> bool
         db = get_db()
         db.collection("consultation_notes").document(notes_id).update({
             "notes": updated_notes_content,
-            "updated_at": now_myt()
+            "updated_at": datetime.now()
         })
         return True
     except Exception as e:

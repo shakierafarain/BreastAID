@@ -55,10 +55,11 @@ def get_admin_stats():
 def create_risk_gauge_chart(percentage):
     """Create a gauge chart for average risk level."""
     fig = go.Figure(data=[go.Indicator(
-        mode="gauge+number",
+        mode="gauge+number+delta",
         value=percentage,
         domain={'x': [0, 1], 'y': [0, 1]},
         title={'text': "Average Risk Level (%)"},
+        delta={'reference': 50},
         gauge={
             'axis': {'range': [None, 100]},
             'bar': {'color': "#ff1493"},
@@ -443,18 +444,37 @@ def show_dashboard_admin_page():
                                     apt_date = st.date_input("Appointment Date", key=f"date_{apt['id']}")
                                 with col_time:
                                     apt_time = st.time_input("Appointment Time", key=f"time_{apt['id']}")
-                                
+
+                                # Show meeting link input for online appointments only
+                                manual_meeting_link = None
+                                if apt.get('appointment_type') == 'online':
+                                    st.info("🎥 This is an **Online** appointment. Please create a Google Meet link and paste it below.")
+                                    st.markdown(
+                                        "👉 [Create Google Meet link](https://meet.google.com/new) — open this, copy the link, paste below.",
+                                        unsafe_allow_html=False
+                                    )
+                                    manual_meeting_link = st.text_input(
+                                        "📋 Paste Google Meet link here",
+                                        placeholder="https://meet.google.com/xxx-xxxx-xxx",
+                                        key=f"meet_link_{apt['id']}"
+                                    )
+
                                 if st.button("✅ Schedule Appointment", key=f"schedule_{apt['id']}", use_container_width=True, type="primary"):
-                                    doctor = doctor_options[selected_doctor]
-                                    if schedule_appointment(
-                                        apt['id'],
-                                        doctor['email'],
-                                        doctor.get('name', 'Doctor'),
-                                        str(apt_date),
-                                        str(apt_time)
-                                    ):
-                                        st.success("Appointment scheduled! Notifications sent to doctor and patient.")
-                                        st.rerun()
+                                    # Validate meeting link for online appointments
+                                    if apt.get('appointment_type') == 'online' and not manual_meeting_link:
+                                        st.warning("⚠️ Please paste a Google Meet link before scheduling an online appointment.")
+                                    else:
+                                        doctor = doctor_options[selected_doctor]
+                                        if schedule_appointment(
+                                            apt['id'],
+                                            doctor['email'],
+                                            doctor.get('name', 'Doctor'),
+                                            str(apt_date),
+                                            str(apt_time),
+                                            manual_meeting_link or None
+                                        ):
+                                            st.success("✅ Appointment scheduled! Notifications sent to doctor and patient.")
+                                            st.rerun()
                             else:
                                 st.warning("No doctors available. Please add doctors first.")
                         
