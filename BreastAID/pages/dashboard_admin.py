@@ -12,8 +12,9 @@ from utils.firebase_helper import (
 from utils.navigation import show_sidebar
 
 
+@st.cache_data(ttl=300)
 def get_admin_stats():
-    """Get admin statistics from Firebase."""
+    """Get admin statistics from Firebase. Cached for 5 minutes."""
     try:
         db = get_db()
         
