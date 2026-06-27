@@ -55,11 +55,10 @@ def get_admin_stats():
 def create_risk_gauge_chart(percentage):
     """Create a gauge chart for average risk level."""
     fig = go.Figure(data=[go.Indicator(
-        mode="gauge+number+delta",
+        mode="gauge+number",
         value=percentage,
         domain={'x': [0, 1], 'y': [0, 1]},
         title={'text': "Average Risk Level (%)"},
-        delta={'reference': 50},
         gauge={
             'axis': {'range': [None, 100]},
             'bar': {'color': "#ff1493"},
