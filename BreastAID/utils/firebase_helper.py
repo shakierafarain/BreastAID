@@ -81,8 +81,9 @@ def save_assessment(email: str, answers: dict, score: int, risk_level: str) -> N
         st.error(f"Error saving assessment: {e}")
 
 
+@st.cache_data(ttl=300)
 def load_user_assessments(email: str) -> list:
-    """Load all assessments for a user from Firestore."""
+    """Load all assessments for a user from Firestore. Cached for 5 minutes."""
     try:
         db = get_db()
         assessments_query = db.collection("users").document(email).collection("assessments")
@@ -155,8 +156,12 @@ def load_public_user_assessments(email: str) -> list:
         return []
 
 
+@st.cache_data(ttl=300)
 def load_all_assessments_aggregated() -> list:
-    """Load all assessments from all public users for doctor dashboard."""
+    """Load all assessments from all public users for doctor dashboard.
+    
+    Cached for 5 minutes to improve dashboard loading performance.
+    """
     try:
         db = get_db()
         all_assessments = []
@@ -242,8 +247,9 @@ def request_appointment(public_email: str, public_name: str, appointment_type: s
         return False
 
 
+@st.cache_data(ttl=300)
 def get_all_appointments() -> list:
-    """Get all appointments for admin."""
+    """Get all appointments for admin. Cached for 5 minutes."""
     try:
         db = get_db()
         appointments = []
@@ -258,9 +264,9 @@ def get_all_appointments() -> list:
     except Exception:
         return []
 
-
+@st.cache_data(ttl=300)
 def get_user_appointments(email: str) -> list:
-    """Get appointments for a specific user (public or doctor)."""
+    """Get appointments for a specific user (public or doctor). Cached for 5 minutes."""
     try:
         db = get_db()
         appointments = []
@@ -466,9 +472,9 @@ def create_notification(recipient_email: str, recipient_role: str, notification_
         st.error(f"Error creating notification: {e}")
         return False
 
-
+@st.cache_data(ttl=60)
 def get_user_notifications(email: str, unread_only: bool = False) -> list:
-    """Get notifications for a user."""
+    """Get notifications for a user. Cached for 1 minute."""
     try:
         db = get_db()
         
@@ -489,9 +495,9 @@ def get_user_notifications(email: str, unread_only: bool = False) -> list:
     except Exception:
         return []
 
-
+@st.cache_data(ttl=60)
 def get_unread_notification_count(email: str) -> int:
-    """Get count of unread notifications."""
+    """Get count of unread notifications. Cached for 1 minute."""
     try:
         db = get_db()
         notifications = db.collection("notifications").where("recipient_email", "==", email).where("read", "==", False).stream()
@@ -551,7 +557,7 @@ def send_chat_message(conversation_id: str, sender_email: str, sender_name: str,
 
 
 def get_chat_messages(conversation_id: str) -> list:
-    """Get all messages in a conversation."""
+    """Get all messages in a conversation. NOT cached for real-time chat."""
     try:
         db = get_db()
         messages = []
