@@ -1,6 +1,11 @@
 """Firebase operations helper functions."""
 import streamlit as st
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+def now_myt():
+    """Return current datetime in Malaysia Time (UTC+8)."""
+    return datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
 from typing import Optional, Dict
 from config.firebase_config import get_db
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -15,7 +20,7 @@ def save_user_info(email: str, name: str, role: str = None, password: str = None
         user_data = {
             "name": name,
             "email": email,
-            "registered_at": datetime.now(),
+            "registered_at": now_myt(),
         }
         if role:
             user_data["role"] = role
@@ -73,7 +78,7 @@ def save_assessment(email: str, answers: dict, score: int, risk_level: str) -> N
             "answers": answers,
             "score": score,
             "risk_level": risk_level,
-            "completed_at": datetime.now(),
+            "completed_at": now_myt(),
         }
         db.collection("users").document(email).collection("assessments").add(assessment_data)
         st.success("Assessment saved!")
@@ -81,16 +86,15 @@ def save_assessment(email: str, answers: dict, score: int, risk_level: str) -> N
         st.error(f"Error saving assessment: {e}")
 
 
-@st.cache_data(ttl=300)
 def load_user_assessments(email: str) -> list:
-    """Load all assessments for a user from Firestore. Cached for 5 minutes."""
+    """Load all assessments for a user from Firestore."""
     try:
         db = get_db()
         assessments_query = db.collection("users").document(email).collection("assessments")
         docs = assessments_query.stream()
         assessments = [{"id": doc.id, **doc.to_dict()} for doc in docs]
         # Sort by completed_at in descending order
-        assessments.sort(key=lambda x: x.get("completed_at", datetime.now()), reverse=True)
+        assessments.sort(key=lambda x: x.get("completed_at", now_myt()), reverse=True)
         return assessments
     except Exception:
         return []
@@ -150,18 +154,14 @@ def load_public_user_assessments(email: str) -> list:
         assessments_query = db.collection("users").document(email).collection("assessments")
         docs = assessments_query.stream()
         assessments = [{"id": doc.id, **doc.to_dict()} for doc in docs]
-        assessments.sort(key=lambda x: x.get("completed_at", datetime.now()), reverse=True)
+        assessments.sort(key=lambda x: x.get("completed_at", now_myt()), reverse=True)
         return assessments
     except Exception:
         return []
 
 
-@st.cache_data(ttl=300)
 def load_all_assessments_aggregated() -> list:
-    """Load all assessments from all public users for doctor dashboard.
-    
-    Cached for 5 minutes to improve dashboard loading performance.
-    """
+    """Load all assessments from all public users for doctor dashboard."""
     try:
         db = get_db()
         all_assessments = []
@@ -185,7 +185,7 @@ def load_all_assessments_aggregated() -> list:
                     assessment_data["assessment_id"] = assessment_doc.id
                     all_assessments.append(assessment_data)
         
-        all_assessments.sort(key=lambda x: x.get("completed_at", datetime.now()), reverse=True)
+        all_assessments.sort(key=lambda x: x.get("completed_at", now_myt()), reverse=True)
         return all_assessments
     except Exception:
         return []
@@ -217,7 +217,7 @@ def request_appointment(public_email: str, public_name: str, appointment_type: s
             "public_email": public_email,
             "public_name": public_name,
             "appointment_type": appointment_type,  # "ftf" or "online"
-            "requested_at": datetime.now(),
+            "requested_at": now_myt(),
             "status": "pending",  # pending, scheduled, confirmed, completed, cancelled
             "appointment_date": None,
             "appointment_time": None,
@@ -247,9 +247,8 @@ def request_appointment(public_email: str, public_name: str, appointment_type: s
         return False
 
 
-@st.cache_data(ttl=300)
 def get_all_appointments() -> list:
-    """Get all appointments for admin. Cached for 5 minutes."""
+    """Get all appointments for admin."""
     try:
         db = get_db()
         appointments = []
@@ -259,14 +258,14 @@ def get_all_appointments() -> list:
             apt["id"] = doc.id
             appointments.append(apt)
         
-        appointments.sort(key=lambda x: x.get("requested_at", datetime.now()), reverse=True)
+        appointments.sort(key=lambda x: x.get("requested_at", now_myt()), reverse=True)
         return appointments
     except Exception:
         return []
 
-@st.cache_data(ttl=300)
+
 def get_user_appointments(email: str) -> list:
-    """Get appointments for a specific user (public or doctor). Cached for 5 minutes."""
+    """Get appointments for a specific user (public or doctor)."""
     try:
         db = get_db()
         appointments = []
@@ -286,7 +285,7 @@ def get_user_appointments(email: str) -> list:
             if apt not in appointments:
                 appointments.append(apt)
         
-        appointments.sort(key=lambda x: x.get("requested_at", datetime.now()), reverse=True)
+        appointments.sort(key=lambda x: x.get("requested_at", now_myt()), reverse=True)
         return appointments
     except Exception:
         return []
@@ -462,7 +461,7 @@ def create_notification(recipient_email: str, recipient_role: str, notification_
             "notification_type": notification_type,
             "message": message,
             "read": False,
-            "created_at": datetime.now(),
+            "created_at": now_myt(),
             "related_id": related_id,
         }
         
@@ -472,9 +471,9 @@ def create_notification(recipient_email: str, recipient_role: str, notification_
         st.error(f"Error creating notification: {e}")
         return False
 
-@st.cache_data(ttl=60)
+
 def get_user_notifications(email: str, unread_only: bool = False) -> list:
-    """Get notifications for a user. Cached for 1 minute."""
+    """Get notifications for a user."""
     try:
         db = get_db()
         
@@ -490,14 +489,14 @@ def get_user_notifications(email: str, unread_only: bool = False) -> list:
             notif["id"] = doc.id
             notifications.append(notif)
         
-        notifications.sort(key=lambda x: x.get("created_at", datetime.now()), reverse=True)
+        notifications.sort(key=lambda x: x.get("created_at", now_myt()), reverse=True)
         return notifications
     except Exception:
         return []
 
-@st.cache_data(ttl=60)
+
 def get_unread_notification_count(email: str) -> int:
-    """Get count of unread notifications. Cached for 1 minute."""
+    """Get count of unread notifications."""
     try:
         db = get_db()
         notifications = db.collection("notifications").where("recipient_email", "==", email).where("read", "==", False).stream()
@@ -536,7 +535,7 @@ def send_chat_message(conversation_id: str, sender_email: str, sender_name: str,
             "recipient_email": recipient_email,
             "content": content,
             "message_type": message_type,
-            "timestamp": datetime.now(),
+            "timestamp": now_myt(),
             "read": False,
         }
         
@@ -545,9 +544,9 @@ def send_chat_message(conversation_id: str, sender_email: str, sender_name: str,
         # Update conversation metadata
         db.collection("conversations").document(conversation_id).set({
             "last_message": content,
-            "last_message_time": datetime.now(),
+            "last_message_time": now_myt(),
             "participants": [sender_email, recipient_email],
-            "updated_at": datetime.now(),
+            "updated_at": now_myt(),
         }, merge=True)
         
         return True
@@ -557,7 +556,7 @@ def send_chat_message(conversation_id: str, sender_email: str, sender_name: str,
 
 
 def get_chat_messages(conversation_id: str) -> list:
-    """Get all messages in a conversation. NOT cached for real-time chat."""
+    """Get all messages in a conversation."""
     try:
         db = get_db()
         messages = []
@@ -569,7 +568,7 @@ def get_chat_messages(conversation_id: str) -> list:
             messages.append(message)
         
         # Sort by timestamp
-        messages.sort(key=lambda x: x.get("timestamp", datetime.now()))
+        messages.sort(key=lambda x: x.get("timestamp", now_myt()))
         return messages
     except Exception:
         return []
@@ -641,7 +640,7 @@ def get_pending_appointments() -> list:
             apt["id"] = doc.id
             appointments.append(apt)
         
-        appointments.sort(key=lambda x: x.get("requested_at", datetime.now()), reverse=True)
+        appointments.sort(key=lambda x: x.get("requested_at", now_myt()), reverse=True)
         return appointments
     except Exception:
         return []
@@ -825,7 +824,7 @@ def update_user_profile(email: str, update_data: Dict) -> bool:
                 return False
         
         # Add updated timestamp
-        update_data["updated_at"] = datetime.now()
+        update_data["updated_at"] = now_myt()
         
         db.collection("users").document(email).update(update_data)
         return True
@@ -852,7 +851,7 @@ def change_user_password(email: str, current_password: str, new_password: str) -
         hashed_password = generate_password_hash(new_password)
         db.collection("users").document(email).update({
             "password": hashed_password,
-            "updated_at": datetime.now()
+            "updated_at": now_myt()
         })
         
         return True
@@ -880,7 +879,7 @@ def update_user_email(old_email: str, new_email: str, password: str) -> bool:
         
         # Copy user data to new email document
         user_data["email"] = new_email
-        user_data["updated_at"] = datetime.now()
+        user_data["updated_at"] = now_myt()
         db.collection("users").document(new_email).set(user_data)
         
         # Delete old email document
@@ -909,8 +908,8 @@ def save_consultation_notes(appointment_id: str, doctor_email: str, doctor_name:
             "patient_email": patient_email,
             "patient_name": patient_name,
             "notes": notes_content,
-            "created_at": datetime.now(),
-            "updated_at": datetime.now(),
+            "created_at": now_myt(),
+            "updated_at": now_myt(),
         }
         
         # Save in a new collection
@@ -919,7 +918,7 @@ def save_consultation_notes(appointment_id: str, doctor_email: str, doctor_name:
         # Mark appointment as completed
         db.collection("appointments").document(appointment_id).update({
             "status": "completed",
-            "completed_at": datetime.now(),
+            "completed_at": now_myt(),
             "has_notes": True
         })
         
@@ -958,7 +957,7 @@ def get_consultation_notes_for_doctor(doctor_email: str) -> list:
             notes_list.append(notes)
         
         # Sort by created_at in descending order
-        notes_list.sort(key=lambda x: x.get("created_at", datetime.now()), reverse=True)
+        notes_list.sort(key=lambda x: x.get("created_at", now_myt()), reverse=True)
         return notes_list
     except Exception:
         return []
@@ -977,7 +976,7 @@ def get_consultation_notes_for_patient(patient_email: str) -> list:
             notes_list.append(notes)
         
         # Sort by created_at in descending order
-        notes_list.sort(key=lambda x: x.get("created_at", datetime.now()), reverse=True)
+        notes_list.sort(key=lambda x: x.get("created_at", now_myt()), reverse=True)
         return notes_list
     except Exception:
         return []
@@ -996,7 +995,7 @@ def get_all_consultation_notes() -> list:
             notes_list.append(notes)
         
         # Sort by created_at in descending order
-        notes_list.sort(key=lambda x: x.get("created_at", datetime.now()), reverse=True)
+        notes_list.sort(key=lambda x: x.get("created_at", now_myt()), reverse=True)
         return notes_list
     except Exception:
         return []
@@ -1008,7 +1007,7 @@ def update_consultation_notes(notes_id: str, updated_notes_content: str) -> bool
         db = get_db()
         db.collection("consultation_notes").document(notes_id).update({
             "notes": updated_notes_content,
-            "updated_at": datetime.now()
+            "updated_at": now_myt()
         })
         return True
     except Exception as e:

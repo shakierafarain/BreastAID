@@ -1,6 +1,20 @@
 """Chat system for notifications, approvals, and communication."""
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+MYT = ZoneInfo("Asia/Kuala_Lumpur")
+
+def to_myt(dt):
+    """Convert a datetime to Malaysia Time for display."""
+    if dt is None:
+        return "Recently"
+    if isinstance(dt, datetime):
+        # If naive (no tzinfo), assume UTC
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(MYT).strftime("%I:%M %p")
+    return "Recently"
 from utils.firebase_helper import (
     send_chat_message,
     get_chat_messages,
@@ -192,10 +206,7 @@ def show_chat_page():
                 timestamp = msg.get("timestamp")
                 msg_type = msg.get("message_type", "text")
                 
-                if isinstance(timestamp, datetime):
-                    time_str = timestamp.strftime("%I:%M %p")
-                else:
-                    time_str = "Recently"
+                time_str = to_myt(timestamp)
                 
                 # Determine if message is from current user
                 is_own_message = msg.get("sender_email") == user_email
