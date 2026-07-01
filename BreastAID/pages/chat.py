@@ -13,7 +13,7 @@ def to_myt(dt):
         # If naive (no tzinfo), assume UTC
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(MYT).strftime("%I:%M %p")
+        return dt.astimezone(MYT).strftime("%d %b %Y, %I:%M %p")
     return "Recently"
 from utils.firebase_helper import (
     send_chat_message,
@@ -81,6 +81,7 @@ def show_chat_page():
                                 "participant_email": apt["public_email"],
                                 "participant_name": apt["public_name"],
                             }
+                            st.success("✅ Conversation opened. You can now assign and chat.")
                             st.rerun()
                     st.divider()
         
@@ -102,6 +103,7 @@ def show_chat_page():
                         "participant_email": doctor_email,
                         "participant_name": doctor_name,
                     }
+                    st.success(f"✅ Chat opened with {doctor_name}.")
                     st.rerun()
         else:
             st.info("No doctors available")
@@ -122,6 +124,7 @@ def show_chat_page():
                     "participant_email": "admin@gmail.com",
                     "participant_name": "Admin",
                 }
+                st.success("✅ Chat opened with Admin.")
                 st.rerun()
         
         with col2:
@@ -142,6 +145,7 @@ def show_chat_page():
                             "participant_name": patient_name,
                             "appointment_id": apt["id"],
                         }
+                        st.success(f"✅ Chat opened with {patient_name}.")
                         st.rerun()
             else:
                 st.info("No approved appointments yet")
@@ -170,6 +174,7 @@ def show_chat_page():
                             "participant_name": doctor_name,
                             "appointment_id": apt["id"],
                         }
+                        st.success(f"✅ Chat opened with {doctor_name}.")
                         st.rerun()
         else:
             st.info("👋 No approved appointments yet. Once a doctor approves your appointment, you can chat with them here!")
@@ -247,7 +252,7 @@ def show_chat_page():
                                 user_role,
                                 conv_id
                             )
-                            st.success("✅ Appointment approved!")
+                            st.success("✅ Appointment approved. The status has been updated.")
                             st.rerun()
                     
                     with col2:
@@ -259,7 +264,7 @@ def show_chat_page():
                                 user_role,
                                 conv_id
                             )
-                            st.info("❌ Appointment declined")
+                            st.info("❌ Appointment declined. It has been sent back for rescheduling.")
                             st.rerun()
         
         # Message input
@@ -294,6 +299,7 @@ def show_chat_page():
                     if success:
                         # Increment counter → new widget key on next render → input is blank
                         st.session_state.msg_send_count += 1
+                        st.success("✅ Message sent.")
                         st.rerun()
                     else:
                         st.error("❌ Failed to send message")
