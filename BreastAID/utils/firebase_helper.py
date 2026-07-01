@@ -1,11 +1,19 @@
 """Firebase operations helper functions."""
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict
 from config.firebase_config import get_db
 from werkzeug.security import generate_password_hash, check_password_hash
 import hashlib
 import uuid
+from zoneinfo import ZoneInfo
+
+MYT = ZoneInfo("Asia/Kuala_Lumpur")
+
+
+def now_myt() -> datetime:
+    """Return the current time in Malaysia Time."""
+    return datetime.now(timezone.utc).astimezone(MYT)
 
 
 def save_user_info(email: str, name: str, role: str = None, password: str = None) -> None:
@@ -15,7 +23,7 @@ def save_user_info(email: str, name: str, role: str = None, password: str = None
         user_data = {
             "name": name,
             "email": email,
-            "registered_at": datetime.now(),
+            "registered_at": now_myt(),
         }
         if role:
             user_data["role"] = role
@@ -73,7 +81,7 @@ def save_assessment(email: str, answers: dict, score: int, risk_level: str) -> N
             "answers": answers,
             "score": score,
             "risk_level": risk_level,
-            "completed_at": datetime.now(),
+            "completed_at": now_myt(),
         }
         db.collection("users").document(email).collection("assessments").add(assessment_data)
         st.success("Assessment saved!")
@@ -212,7 +220,7 @@ def request_appointment(public_email: str, public_name: str, appointment_type: s
             "public_email": public_email,
             "public_name": public_name,
             "appointment_type": appointment_type,  # "ftf" or "online"
-            "requested_at": datetime.now(),
+            "requested_at": now_myt(),
             "status": "pending",  # pending, scheduled, confirmed, completed, cancelled
             "appointment_date": None,
             "appointment_time": None,
@@ -287,11 +295,7 @@ def get_user_appointments(email: str) -> list:
 
 
 def schedule_appointment(appointment_id: str, doctor_email: str, doctor_name: str, appointment_date: str, appointment_time: str, meeting_link: str = None) -> bool:
-    """Admin schedules appointment with specific doctor.
-    
-    For online appointments, admin manually provides the meeting_link.
-    For face-to-face appointments, meeting_link is None.
-    """
+    """Admin schedules appointment with specific doctor."""
     try:
         db = get_db()
         
@@ -304,8 +308,10 @@ def schedule_appointment(appointment_id: str, doctor_email: str, doctor_name: st
         apt = apt_doc.to_dict()
         appointment_type = apt.get("appointment_type", "ftf")
         
-        # Use the manually provided meeting link (no auto-generation)
-        # meeting_link is passed in directly from the admin dashboard
+        # Generate meeting link if online
+        meeting_link = None
+        if appointment_type == "online":
+            meeting_link = generate_google_meet_link(appointment_id)
         
         # Update appointment
         update_data = {
@@ -315,6 +321,8 @@ def schedule_appointment(appointment_id: str, doctor_email: str, doctor_name: st
             "appointment_time": appointment_time,
             "status": "scheduled",
             "meeting_link": meeting_link,
+            "public_accepted": None,
+            "doctor_accepted": None,
         }
         
         db.collection("appointments").document(appointment_id).update(update_data)
@@ -324,7 +332,7 @@ def schedule_appointment(appointment_id: str, doctor_email: str, doctor_name: st
         meeting_info = f"\n\n🔗 Meeting Link: {meeting_link}" if meeting_link else ""
         
         # Notify doctor
-        doctor_msg = f"{apt_type_display} scheduled with {apt['public_name']} on {appointment_date} at {appointment_time}. Please accept or decline.{meeting_info}"
+        doctor_msg = f"{apt_type_display} scheduled with {apt['public_name']} on {appointment_date} at {appointment_time}. Please accept this appointment.{meeting_info}"
         create_notification(
             recipient_email=doctor_email,
             recipient_role="Doctor",
@@ -334,7 +342,7 @@ def schedule_appointment(appointment_id: str, doctor_email: str, doctor_name: st
         )
         
         # Notify public user
-        public_msg = f"Your {apt_type_display.lower()} has been scheduled with Dr. {doctor_name} on {appointment_date} at {appointment_time}. Please accept or decline.{meeting_info}"
+        public_msg = f"Your {apt_type_display.lower()} has been scheduled with Dr. {doctor_name} on {appointment_date} at {appointment_time}. Please accept or request a reschedule.{meeting_info}"
         create_notification(
             recipient_email=apt['public_email'],
             recipient_role="Public",
@@ -363,11 +371,16 @@ def accept_appointment(appointment_id: str, user_email: str, user_role: str) -> 
         apt = apt_doc.to_dict()
         
         # Update the acceptance status
+        # When doctor accepts, also mark public_accepted = True because the
+        # public user already initiated the appointment request — their intent
+        # to proceed is implied. This ensures the appointment confirms immediately
+        # when the doctor accepts, unlocking chat for both parties.
         update_data = {}
         if user_role == "Public":
             update_data["public_accepted"] = True
         elif user_role == "Doctor":
             update_data["doctor_accepted"] = True
+            update_data["public_accepted"] = True  # implied — public initiated the request
         else:
             st.error(f"❌ Invalid user role: {user_role}")
             return False
@@ -401,8 +414,8 @@ def accept_appointment(appointment_id: str, user_email: str, user_role: str) -> 
         return False
 
 
-def decline_appointment(appointment_id: str, user_email: str, user_role: str) -> bool:
-    """User (public or doctor) declines appointment."""
+def request_reschedule_appointment(appointment_id: str, user_email: str, user_role: str) -> bool:
+    """User (public or doctor) requests appointment reschedule."""
     try:
         db = get_db()
         
@@ -417,13 +430,15 @@ def decline_appointment(appointment_id: str, user_email: str, user_role: str) ->
             st.error("❌ Could not read appointment data")
             return False
         
-        # Notify admin of decline
+        # Notify admin of reschedule request
         decliner_name = apt.get('public_name') if user_role == "Public" else apt.get('doctor_name')
+        previous_date = apt.get("appointment_date") or "N/A"
+        previous_time = apt.get("appointment_time") or "N/A"
         create_notification(
             recipient_email="admin@gmail.com",
             recipient_role="Admin",
-            notification_type="appointment_declined",
-            message=f"Appointment declined by {decliner_name}. Please reschedule.",
+            notification_type="appointment_reschedule_requested",
+            message=f"Appointment reschedule requested by {decliner_name}. Previous appointment was on {previous_date} at {previous_time}. Please choose a new date and time.",
             related_id=appointment_id
         )
         
@@ -433,8 +448,10 @@ def decline_appointment(appointment_id: str, user_email: str, user_role: str) ->
         }
         if user_role == "Public":
             update_data["public_accepted"] = False
+            update_data["doctor_accepted"] = False
         elif user_role == "Doctor":
             update_data["doctor_accepted"] = False
+            update_data["public_accepted"] = False
         else:
             st.error(f"❌ Invalid user role: {user_role}")
             return False
@@ -443,8 +460,13 @@ def decline_appointment(appointment_id: str, user_email: str, user_role: str) ->
         
         return True
     except Exception as e:
-        st.error(f"Error declining appointment: {e}")
+        st.error(f"Error requesting reschedule: {e}")
         return False
+
+
+def decline_appointment(appointment_id: str, user_email: str, user_role: str) -> bool:
+    """Backward-compatible wrapper for reschedule requests."""
+    return request_reschedule_appointment(appointment_id, user_email, user_role)
 
 
 def create_notification(recipient_email: str, recipient_role: str, notification_type: str, message: str, related_id: str = None) -> bool:
@@ -458,7 +480,7 @@ def create_notification(recipient_email: str, recipient_role: str, notification_
             "notification_type": notification_type,
             "message": message,
             "read": False,
-            "created_at": datetime.now(),
+            "created_at": now_myt(),
             "related_id": related_id,
         }
         
@@ -532,7 +554,7 @@ def send_chat_message(conversation_id: str, sender_email: str, sender_name: str,
             "recipient_email": recipient_email,
             "content": content,
             "message_type": message_type,
-            "timestamp": datetime.now(),
+            "timestamp": now_myt(),
             "read": False,
         }
         
@@ -541,9 +563,9 @@ def send_chat_message(conversation_id: str, sender_email: str, sender_name: str,
         # Update conversation metadata
         db.collection("conversations").document(conversation_id).set({
             "last_message": content,
-            "last_message_time": datetime.now(),
+            "last_message_time": now_myt(),
             "participants": [sender_email, recipient_email],
-            "updated_at": datetime.now(),
+            "updated_at": now_myt(),
         }, merge=True)
         
         return True
