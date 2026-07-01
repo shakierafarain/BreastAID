@@ -4,7 +4,7 @@ from datetime import datetime
 from utils.firebase_helper import (
     get_user_notifications,
     accept_appointment,
-    decline_appointment,
+    request_reschedule_appointment,
     get_user_appointments,
     mark_notification_as_read,
 )
@@ -14,12 +14,6 @@ from utils.navigation import show_sidebar
 def show_notifications_page():
     """Display notifications page."""
     show_sidebar()
-    
-    # Initialize session state for tracking actions
-    if "accepted_appointments" not in st.session_state:
-        st.session_state.accepted_appointments = set()
-    if "rescheduled_appointments" not in st.session_state:
-        st.session_state.rescheduled_appointments = set()
     
     st.markdown(
         """
@@ -81,6 +75,12 @@ def show_notifications_page():
     )
 
     st.title("📬 Notifications")
+
+    def action_feedback(action: str, detail: str = ""):
+        if detail:
+            st.success(f"✅ {action}. {detail}")
+        else:
+            st.success(f"✅ {action}")
     
     col1, col2 = st.columns([4, 1])
     with col1:
@@ -137,44 +137,50 @@ def show_notifications_page():
             if notif_type_key == "appointment_scheduled":
                 apt_id = notif.get("related_id")
                 user_role = st.session_state.get("user_role", "Public")
+                appointments = get_user_appointments(st.session_state.user_email)
+                apt = next((a for a in appointments if a.get("id") == apt_id), None)
                 
-                # Check if already accepted or rescheduled
-                if apt_id in st.session_state.accepted_appointments:
-                    if user_role == "Doctor":
-                        st.success("✅ **Appointment Accepted!** Ready for consultation.")
+                # Use persisted Firestore acceptance flags so the action only appears once.
+                if user_role == "Doctor":
+                    st.markdown("**Action Required:** Please accept this appointment")
+                    if apt and apt.get("doctor_accepted"):
+                        st.success("✅ Appointment accepted. You can now chat with your assigned patient.")
                     else:
-                        st.success("✅ **Appointment Accepted!** Awaiting confirmation from doctor.")
-                elif apt_id in st.session_state.rescheduled_appointments:
-                    st.info("📞 **Reschedule Requested!** Admin will contact you soon to reschedule.")
+                        if st.button("✅ Accept Appointment", key=f"accept_{notif['id']}", use_container_width=True):
+                            if apt_id:
+                                if accept_appointment(apt_id, st.session_state.user_email, st.session_state.user_role):
+                                    action_feedback("Appointment accepted", "You can now chat with your assigned patient.")
+                                    st.rerun()
+                            else:
+                                st.error("❌ Missing appointment ID in notification - Contact admin")
+
+                elif apt and apt.get("public_accepted"):
+                    st.success("✅ Appointment accepted. You can now chat with your assigned doctor/patient.")
                 else:
-                    st.markdown("**Action Required:** Please accept or request to reschedule")
-                    col_accept, col_decline = st.columns(2)
+                    st.markdown("**Action Required:** Please accept or request a reschedule")
+                    col_accept, col_reschedule = st.columns(2)
                     
                     with col_accept:
                         if st.button("✅ Accept Appointment", key=f"accept_{notif['id']}", use_container_width=True):
                             if apt_id:
                                 if accept_appointment(apt_id, st.session_state.user_email, st.session_state.user_role):
-                                    st.session_state.accepted_appointments.add(apt_id)
-                                    if user_role == "Doctor":
-                                        st.success("✅ **Appointment Accepted!** Ready for consultation.")
-                                    else:
-                                        st.success("✅ **Appointment Accepted!** Awaiting confirmation from doctor.")
+                                    action_feedback("Appointment accepted", "You can now chat with your assigned doctor.")
                                     st.rerun()
                             else:
                                 st.error("❌ Missing appointment ID in notification - Contact admin")
                     
-                    with col_decline:
-                        if st.button("📞 Request Reschedule", key=f"reschedule_{notif['id']}", use_container_width=True):
-                            if apt_id:
-                                if decline_appointment(apt_id, st.session_state.user_email, st.session_state.user_role):
-                                    st.session_state.rescheduled_appointments.add(apt_id)
-                                    st.info("📞 **Reschedule Requested!** Admin will contact you soon to reschedule.")
-                                    st.rerun()
-                            else:
-                                st.error("❌ Missing appointment ID in notification - Contact admin")
+                    if user_role == "Public":
+                        with col_reschedule:
+                            if st.button("📞 Request Reschedule", key=f"reschedule_{notif['id']}", use_container_width=True):
+                                if apt_id:
+                                    if request_reschedule_appointment(apt_id, st.session_state.user_email, st.session_state.user_role):
+                                        action_feedback("Reschedule requested", "Admin will contact you soon to reschedule.")
+                                        st.rerun()
+                                else:
+                                    st.error("❌ Missing appointment ID in notification - Contact admin")
             
             elif notif_type_key == "appointment_confirmed":
-                st.success("✅ Appointment is confirmed! Consultation ready.")
+                st.success("✅ Appointment confirmed. Consultation is ready.")
                 
                 # Get appointment details to check if it's online and show meeting link
                 apt_id = notif.get("related_id")
@@ -197,6 +203,8 @@ def show_notifications_page():
                     except Exception as e:
                         pass
             
+            elif notif_type_key == "appointment_reschedule_requested":
+                st.warning("⚠️ Reschedule request sent to admin. Waiting for a new appointment time.")
             elif notif_type_key == "appointment_declined":
                 st.warning("⚠️ Appointment was declined - reschedule in progress")
             
