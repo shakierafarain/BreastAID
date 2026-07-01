@@ -62,16 +62,16 @@ def show_result_page():
         with col1:
             if st.button("🎥 Online Consultation", use_container_width=True, type="primary"):
                 if request_appointment(st.session_state.user_email, st.session_state.user_name, "online"):
-                    st.success("✅ Online consultation request sent! Admin will contact you soon.")
-                    st.info("You will receive notifications when a doctor is assigned and for any updates.")
+                    st.success("✅ Online consultation request submitted.")
+                    st.info("Admin will review it and notify you after a doctor is assigned.")
                 else:
                     st.error("Failed to send appointment request. Please try again.")
         
         with col2:
             if st.button("🏥 Face-to-Face Visit", use_container_width=True):
                 if request_appointment(st.session_state.user_email, st.session_state.user_name, "ftf"):
-                    st.success("✅ Face-to-face appointment request sent! Admin will contact you soon.")
-                    st.info("You will receive notifications when a doctor is assigned and for any updates.")
+                    st.success("✅ Face-to-face appointment request submitted.")
+                    st.info("Admin will review it and notify you after a doctor is assigned.")
                 else:
                     st.error("Failed to send appointment request. Please try again.")
     else:
