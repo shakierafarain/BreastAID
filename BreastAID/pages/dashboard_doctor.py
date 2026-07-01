@@ -8,7 +8,6 @@ from utils.firebase_helper import (
     load_all_assessments_aggregated,
     get_user_appointments,
     accept_appointment,
-    decline_appointment,
     get_unread_notification_count,
 )
 from utils.navigation import show_sidebar
@@ -453,7 +452,7 @@ def show_dashboard_doctor_page():
                 **Date:** {apt.get('appointment_date', 'N/A')} at {apt.get('appointment_time', 'N/A')}  
                 **Status:** Waiting for confirmation{meeting_info}
                 """)
-                st.caption("Check your notifications to accept or request reschedule")
+                st.caption("Check your notifications to accept the appointment")
             st.divider()
     
     if confirmed_apts:

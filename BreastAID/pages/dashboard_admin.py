@@ -55,11 +55,10 @@ def get_admin_stats():
 def create_risk_gauge_chart(percentage):
     """Create a gauge chart for average risk level."""
     fig = go.Figure(data=[go.Indicator(
-        mode="gauge+number+delta",
+        mode="gauge+number",
         value=percentage,
         domain={'x': [0, 1], 'y': [0, 1]},
         title={'text': "Average Risk Level (%)"},
-        delta={'reference': 50},
         gauge={
             'axis': {'range': [None, 100]},
             'bar': {'color': "#ff1493"},
@@ -93,23 +92,20 @@ def get_appointment_overview():
     try:
         all_appointments = get_all_appointments()
         
-        upcoming = sum(1 for a in all_appointments if a.get("status") in ["scheduled", "confirmed"])
-        completed = sum(1 for a in all_appointments if a.get("status") == "completed")
-        cancelled = sum(1 for a in all_appointments if a.get("status") in ["cancelled", "needs_reschedule"])
         pending = sum(1 for a in all_appointments if a.get("status") == "pending")
+        confirmed = sum(1 for a in all_appointments if a.get("status") == "confirmed")
+        reschedule = sum(1 for a in all_appointments if a.get("status") == "needs_reschedule")
         
         return {
             "pending": pending,
-            "upcoming": upcoming,
-            "completed": completed,
-            "cancelled": cancelled,
+            "confirmed": confirmed,
+            "reschedule": reschedule,
         }
     except Exception:
         return {
             "pending": 0,
-            "upcoming": 0,
-            "completed": 0,
-            "cancelled": 0,
+            "confirmed": 0,
+            "reschedule": 0,
         }
 
 
@@ -260,7 +256,7 @@ def show_dashboard_admin_page():
         st.markdown('<div class="admin-title">Welcome Back, Admin</div>', unsafe_allow_html=True)
     
     with col2:
-        if st.button("🚪 Logout", use_container_width=True):
+        if st.button("🚪 Logout"):
             st.session_state.user_email = None
             st.session_state.user_name = None
             st.session_state.user_role = None
@@ -268,6 +264,24 @@ def show_dashboard_admin_page():
             st.rerun()
 
     st.divider()
+
+    def _query_value(name: str) -> str:
+        value = st.query_params.get(name)
+        if isinstance(value, list):
+            return str(value[0]) if value else ""
+        return str(value) if value is not None else ""
+
+    query_admin_action = _query_value("admin_action")
+    query_apt_filter = _query_value("apt_filter")
+    if query_admin_action == "manage_appointments":
+        st.session_state.admin_action = "manage_appointments"
+        if query_apt_filter:
+            st.session_state.apt_filter = str(query_apt_filter)
+
+    def go_to_appointments(filter_name: str):
+        st.session_state.admin_action = "manage_appointments"
+        st.session_state.apt_filter = filter_name
+        st.rerun()
 
     # Get stats
     stats = get_admin_stats()
@@ -338,28 +352,47 @@ def show_dashboard_admin_page():
         st.markdown('<div class="section-title">Appointment Overview</div>', unsafe_allow_html=True)
         
         appointments = get_appointment_overview()
-        
+
         st.markdown(
             f"""
-            <div class="appointment-card">
-                <div class="appointment-label">Upcoming</div>
-                <div class="appointment-value">{appointments['upcoming']}</div>
-            </div>
-            <div class="appointment-card">
-                <div class="appointment-label">Completed</div>
-                <div class="appointment-value">{appointments['completed']}</div>
-            </div>
-            <div class="appointment-card">
-                <div class="appointment-label">Cancelled</div>
-                <div class="appointment-value">{appointments['cancelled']}</div>
+            <div class="appointment-card" style="margin-bottom: 1rem;">
+                <div class="appointment-label">Pending</div>
+                <div class="appointment-value">{appointments['pending']}</div>
             </div>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
+        if st.button("View Pending", use_container_width=True, key="overview_pending"):
+            go_to_appointments("Pending")
+
+        st.markdown(
+            f"""
+            <div class="appointment-card" style="margin-bottom: 1rem;">
+                <div class="appointment-label">Confirmed</div>
+                <div class="appointment-value">{appointments['confirmed']}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("View Confirmed", use_container_width=True, key="overview_confirmed"):
+            go_to_appointments("Confirmed")
+
+        st.markdown(
+            f"""
+            <div class="appointment-card" style="margin-bottom: 1rem;">
+                <div class="appointment-label">Reschedule</div>
+                <div class="appointment-value">{appointments['reschedule']}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("View Reschedule", use_container_width=True, key="overview_reschedule"):
+            go_to_appointments("Needs Reschedule")
     
     st.divider()
 
     # Management Sections
+    st.markdown('<div id="manage-appointments"></div>', unsafe_allow_html=True)
     col1, col2 = st.columns([1, 1])
     
     with col1:
@@ -401,7 +434,7 @@ def show_dashboard_admin_page():
             
             # Filter by status
             status_filter = st.selectbox("Filter by Status", 
-                                        ["Pending", "Scheduled", "Confirmed", "All"],
+                                        ["Pending", "Scheduled", "Confirmed", "Needs Reschedule", "All"],
                                         key="apt_filter")
             
             if status_filter == "Pending":
@@ -410,6 +443,8 @@ def show_dashboard_admin_page():
                 filtered_apts = [a for a in all_appointments if a.get("status") == "scheduled"]
             elif status_filter == "Confirmed":
                 filtered_apts = [a for a in all_appointments if a.get("status") == "confirmed"]
+            elif status_filter == "Needs Reschedule":
+                filtered_apts = [a for a in all_appointments if a.get("status") == "needs_reschedule"]
             else:
                 filtered_apts = all_appointments
             
@@ -427,8 +462,9 @@ def show_dashboard_admin_page():
                         **Requested:** {apt.get('requested_at').strftime('%b %d, %Y') if apt.get('requested_at') else 'N/A'}
                         """)
                         
-                        if apt.get("status") == "pending":
-                            st.markdown("**Action: Assign Doctor & Schedule**")
+                        if apt.get("status") in ["pending", "needs_reschedule"]:
+                            action_label = "Reschedule Appointment" if apt.get("status") == "needs_reschedule" else "Assign Doctor & Schedule"
+                            st.markdown(f"**Action: {action_label}**")
                             
                             doctors = get_all_doctors()
                             if doctors:
@@ -459,7 +495,8 @@ def show_dashboard_admin_page():
                                         key=f"meet_link_{apt['id']}"
                                     )
 
-                                if st.button("✅ Schedule Appointment", key=f"schedule_{apt['id']}", use_container_width=True, type="primary"):
+                                button_label = "✅ Reschedule Appointment" if apt.get("status") == "needs_reschedule" else "✅ Schedule Appointment"
+                                if st.button(button_label, key=f"schedule_{apt['id']}", use_container_width=True, type="primary"):
                                     # Validate meeting link for online appointments
                                     if apt.get('appointment_type') == 'online' and not manual_meeting_link:
                                         st.warning("⚠️ Please paste a Google Meet link before scheduling an online appointment.")
@@ -473,7 +510,10 @@ def show_dashboard_admin_page():
                                             str(apt_time),
                                             manual_meeting_link or None
                                         ):
-                                            st.success("✅ Appointment scheduled! Notifications sent to doctor and patient.")
+                                            if apt.get("status") == "needs_reschedule":
+                                                st.success("✅ Appointment rescheduled! Notifications sent to doctor and patient.")
+                                            else:
+                                                st.success("✅ Appointment scheduled! Notifications sent to doctor and patient.")
                                             st.rerun()
                             else:
                                 st.warning("No doctors available. Please add doctors first.")
@@ -563,7 +603,7 @@ def show_dashboard_admin_page():
                             try:
                                 from utils.firebase_helper import update_user_role
                                 update_user_role(selected_email, new_role)
-                                st.success(f"Role updated for {selected_email}")
+                                st.success(f"✅ Role updated for {selected_email}. New role: {new_role}")
                                 st.session_state.admin_action = None
                                 st.rerun()
                             except Exception as e:
