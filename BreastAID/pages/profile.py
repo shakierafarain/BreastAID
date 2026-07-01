@@ -14,6 +14,9 @@ def show_profile_page():
     show_sidebar()
     
     st.title("👤 My Profile")
+
+    if st.session_state.pop("profile_save_success", False):
+        st.success("✅ Save successfully")
     
     user_email = st.session_state.get("user_email")
     user_role = st.session_state.get("user_role", "Public")
@@ -198,7 +201,7 @@ def show_profile_page():
             
             if update_user_profile(user_email, update_data):
                 st.session_state.user_name = new_name
-                st.success("✅ Profile updated successfully!")
+                st.session_state.profile_save_success = True
                 st.rerun()
             else:
                 st.error("❌ Failed to update profile")
