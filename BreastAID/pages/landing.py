@@ -179,10 +179,7 @@ def show_landing_page():
         else:
             st.markdown('<div class="landing-brand">BreastAID</div>', unsafe_allow_html=True)
     with nav_col_2:
-        st.markdown(
-            '<div class="landing-links"><span>Learn</span><span>Trends</span><span>Support</span></div>',
-            unsafe_allow_html=True,
-        )
+        pass
     with nav_col_3:
         if st.button("Log in", key="landing_login", use_container_width=True):
             st.session_state.page = "login"
