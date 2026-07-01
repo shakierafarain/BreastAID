@@ -15,6 +15,15 @@ from utils.navigation import show_sidebar
 def show_consultation_notes_page():
     """Display consultation notes page with role-specific access."""
     show_sidebar()
+
+    def format_date(value, with_time: bool = False):
+        if hasattr(value, "strftime"):
+            return value.strftime("%b %d, %Y at %I:%M %p") if with_time else value.strftime("%b %d, %Y")
+        return "Recently"
+
+    def preview_notes(notes: str, length: int = 80) -> str:
+        text = (notes or "No notes provided").replace("\n", " ").strip()
+        return text[:length] + "..." if len(text) > length else text
     
     st.title("📋 Consultation Notes")
     
@@ -70,48 +79,24 @@ def show_consultation_notes_page():
                 )]
             
             if filtered_notes:
+                table_rows = []
                 for notes in filtered_notes:
-                    with st.container():
-                        # Header with patient and doctor info
-                        col1, col2, col3 = st.columns([2, 2, 1])
-                        
-                        with col1:
-                            st.markdown(f"""
-                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
-                                <strong>👤 Patient</strong><br>
-                                {notes.get('patient_name', 'Unknown')}<br>
-                                <small>{notes.get('patient_email')}</small>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        with col2:
-                            st.markdown(f"""
-                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
-                                <strong>👨‍⚕️ Doctor</strong><br>
-                                Dr. {notes.get('doctor_name', 'Unknown')}<br>
-                                <small>{notes.get('doctor_email')}</small>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        with col3:
-                            st.markdown(f"""
-                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px;">
-                                <strong>📅 Date</strong><br>
-                                {notes.get('created_at').strftime('%b %d, %Y') if hasattr(notes.get('created_at'), 'strftime') else 'Recently'}
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        st.divider()
-                        
-                        # Notes content
-                        st.markdown(f"""
-                        <div style="background: #fff3cd; padding: 1rem; border-left: 4px solid #ffc107; border-radius: 4px; margin: 1rem 0;">
-                            <strong>📝 Notes:</strong><br><br>
-                            {notes.get('notes', 'No notes provided').replace(chr(10), '<br>')}
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        st.divider()
+                    table_rows.append({
+                        "Patient": f"{notes.get('patient_name', 'Unknown')} ({notes.get('patient_email', '')})",
+                        "Doctor": f"Dr. {notes.get('doctor_name', 'Unknown')} ({notes.get('doctor_email', '')})",
+                        "Date": format_date(notes.get('created_at')),
+                        "Notes Preview": preview_notes(notes.get('notes', 'No notes provided')),
+                    })
+
+                st.dataframe(table_rows, use_container_width=True, hide_index=True)
+
+                st.markdown("#### Full Notes")
+                for notes in filtered_notes:
+                    with st.expander(f"{notes.get('patient_name', 'Unknown')} - {format_date(notes.get('created_at'))}"):
+                        st.write(f"Patient: {notes.get('patient_name', 'Unknown')} ({notes.get('patient_email', 'N/A')})")
+                        st.write(f"Doctor: Dr. {notes.get('doctor_name', 'Unknown')} ({notes.get('doctor_email', 'N/A')})")
+                        st.write(f"Date: {format_date(notes.get('created_at'), with_time=True)}")
+                        st.markdown(notes.get('notes', 'No notes provided').replace(chr(10), "\n\n"))
             else:
                 st.info("No consultation notes found matching your search.")
         else:
@@ -129,36 +114,31 @@ def show_consultation_notes_page():
             my_notes = get_consultation_notes_for_doctor(user_email)
             
             if my_notes:
+                table_rows = []
                 for notes in my_notes:
-                    with st.container():
-                        col1, col2 = st.columns([3, 1])
-                        
-                        with col1:
-                            st.markdown(f"""
-                            <div style="background: #e7f3ff; padding: 1rem; border-radius: 8px;">
-                                <strong>👤 Patient:</strong> {notes.get('patient_name', 'Unknown')}<br>
-                                <small>{notes.get('patient_email')}</small><br><br>
-                                <strong>📅 Date:</strong> {notes.get('created_at').strftime('%b %d, %Y at %I:%M %p') if hasattr(notes.get('created_at'), 'strftime') else 'Recently'}
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        with col2:
-                            if st.button("✏️ Edit", key=f"edit_{notes['id']}"):
-                                st.session_state.editing_notes_id = notes['id']
-                                st.rerun()
-                        
-                        st.divider()
-                        
-                        # Notes content
+                    table_rows.append({
+                        "Patient": f"{notes.get('patient_name', 'Unknown')} ({notes.get('patient_email', '')})",
+                        "Date": format_date(notes.get('created_at'), with_time=True),
+                        "Notes Preview": preview_notes(notes.get('notes', 'No notes provided')),
+                        "Edit Status": "Open to edit below",
+                    })
+
+                st.dataframe(table_rows, use_container_width=True, hide_index=True)
+
+                st.markdown("#### Edit Notes")
+                for notes in my_notes:
+                    with st.expander(f"{notes.get('patient_name', 'Unknown')} - {format_date(notes.get('created_at'), with_time=True)}"):
+                        st.write(f"Patient: {notes.get('patient_name', 'Unknown')} ({notes.get('patient_email', 'N/A')})")
+                        st.write(f"Date: {format_date(notes.get('created_at'), with_time=True)}")
+
                         if st.session_state.get("editing_notes_id") == notes['id']:
-                            st.markdown("**✏️ Edit Notes:**")
                             updated_content = st.text_area(
                                 "Update consultation notes:",
                                 value=notes.get('notes', ''),
                                 height=200,
                                 key=f"textarea_{notes['id']}"
                             )
-                            
+
                             col1, col2, col3 = st.columns(3)
                             with col1:
                                 if st.button("💾 Save", key=f"save_{notes['id']}", use_container_width=True):
@@ -166,20 +146,16 @@ def show_consultation_notes_page():
                                         st.success("✅ Notes updated successfully!")
                                         del st.session_state.editing_notes_id
                                         st.rerun()
-                            
+
                             with col2:
                                 if st.button("❌ Cancel", key=f"cancel_{notes['id']}", use_container_width=True):
                                     del st.session_state.editing_notes_id
                                     st.rerun()
                         else:
-                            st.markdown(f"""
-                            <div style="background: #fff3cd; padding: 1rem; border-left: 4px solid #ffc107; border-radius: 4px; margin: 1rem 0;">
-                                <strong>📝 Notes:</strong><br><br>
-                                {notes.get('notes', 'No notes provided').replace(chr(10), '<br>')}
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        st.divider()
+                            st.markdown(notes.get('notes', 'No notes provided').replace(chr(10), "\n\n"))
+                            if st.button("✏️ Edit This Note", key=f"edit_{notes['id']}"):
+                                st.session_state.editing_notes_id = notes['id']
+                                st.rerun()
             else:
                 st.info("📭 You haven't written any consultation notes yet.")
         
@@ -202,22 +178,22 @@ def show_consultation_notes_page():
                     patient_notes_combined.extend(notes_list)
                 
                 if patient_notes_combined:
+                    table_rows = []
                     for notes in patient_notes_combined:
-                        with st.container():
-                            st.markdown(f"""
-                            <div style="background: #d4edda; padding: 1rem; border-radius: 8px;">
-                                <strong>👤 Patient:</strong> {notes.get('patient_name', 'Unknown')}<br>
-                                <strong>📅 Consultation Date:</strong> {notes.get('created_at').strftime('%b %d, %Y') if hasattr(notes.get('created_at'), 'strftime') else 'Recently'}
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                            st.markdown(f"""
-                            <div style="background: #fff3cd; padding: 1rem; border-left: 4px solid #ffc107; border-radius: 4px; margin: 1rem 0;">
-                                {notes.get('notes', 'No notes provided').replace(chr(10), '<br>')}
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                            st.divider()
+                        table_rows.append({
+                            "Patient": notes.get('patient_name', 'Unknown'),
+                            "Consultation Date": format_date(notes.get('created_at')),
+                            "Notes Preview": preview_notes(notes.get('notes', 'No notes provided')),
+                        })
+
+                    st.dataframe(table_rows, use_container_width=True, hide_index=True)
+
+                    st.markdown("#### Full Notes")
+                    for notes in patient_notes_combined:
+                        with st.expander(f"{notes.get('patient_name', 'Unknown')} - {format_date(notes.get('created_at'))}"):
+                            st.write(f"Patient: {notes.get('patient_name', 'Unknown')}")
+                            st.write(f"Consultation Date: {format_date(notes.get('created_at'), with_time=True)}")
+                            st.markdown(notes.get('notes', 'No notes provided').replace(chr(10), "\n\n"))
                 else:
                     st.info("No consultation notes for your patients yet.")
             else:
@@ -232,35 +208,22 @@ def show_consultation_notes_page():
         patient_notes = get_consultation_notes_for_patient(user_email)
         
         if patient_notes:
+            table_rows = []
             for notes in patient_notes:
-                with st.container():
-                    col1, col2 = st.columns([3, 1])
-                    
-                    with col1:
-                        st.markdown(f"""
-                        <div style="background: #d4edda; padding: 1rem; border-radius: 8px;">
-                            <strong>👨‍⚕️ Doctor:</strong> Dr. {notes.get('doctor_name', 'Unknown')}<br>
-                            <strong>📅 Consultation Date:</strong> {notes.get('created_at').strftime('%b %d, %Y at %I:%M %p') if hasattr(notes.get('created_at'), 'strftime') else 'Recently'}
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    with col2:
-                        st.markdown(f"""
-                        <div style="background: #d4edda; padding: 1rem; border-radius: 8px; text-align: center;">
-                            <strong>✅ Completed</strong>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    st.divider()
-                    
-                    # Notes content
-                    st.markdown(f"""
-                    <div style="background: #fff3cd; padding: 1rem; border-left: 4px solid #ffc107; border-radius: 4px; margin: 1rem 0;">
-                        <strong>📝 Doctor's Notes:</strong><br><br>
-                        {notes.get('notes', 'No notes provided').replace(chr(10), '<br>')}
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    st.divider()
+                table_rows.append({
+                    "Doctor": f"Dr. {notes.get('doctor_name', 'Unknown')}",
+                    "Consultation Date": format_date(notes.get('created_at'), with_time=True),
+                    "Status": "Completed",
+                    "Notes Preview": preview_notes(notes.get('notes', 'No notes provided')),
+                })
+
+            st.dataframe(table_rows, use_container_width=True, hide_index=True)
+
+            st.markdown("#### Full Notes")
+            for notes in patient_notes:
+                with st.expander(f"Dr. {notes.get('doctor_name', 'Unknown')} - {format_date(notes.get('created_at'))}"):
+                    st.write(f"Doctor: Dr. {notes.get('doctor_name', 'Unknown')}")
+                    st.write(f"Consultation Date: {format_date(notes.get('created_at'), with_time=True)}")
+                    st.markdown(notes.get('notes', 'No notes provided').replace(chr(10), "\n\n"))
         else:
             st.info("👋 You don't have any consultation notes yet. They will appear here after your consultations are completed.")
